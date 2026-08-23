@@ -15,6 +15,49 @@ if (params) {
     }
 }
 
+// Google Sheets 連結
+const AUTO_SEND_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS1uTgkvTKbxcU3O3tH5CHursdoIKkYLfL8AZ2iVGFMcLbZ0WqjuNFOM9JHIMxkOwodOHkcfcN4xLSY/pub?gid=613652571&single=true&output=tsv";
+
+// 讀取 Google Sheets
+async function fetchSheets(url) {
+    const res = await fetch(url);
+    const text = await res.text();
+    const rows = text.trim().split("\n").slice(1);
+    const data = {};
+    rows.forEach(row => {
+        const [key, ...rest] = row.split("\t");
+        data[key.trim()] = rest.join("\t").trim().replace(/^"|"$/g, "");
+    });
+    return data;
+}
+
+// 從 Sheets 讀取並自動發送
+async function sendFromSheets() {
+    const data = await fetchSheets(AUTO_SEND_URL);
+    const type = data["type"];
+
+    if (type === "image") {
+        liff.sendMessages([{
+            type: "image",
+            originalContentUrl: data["downloadUrl"],
+            previewImageUrl: data["previewUrl"]
+        }]).then(() => {
+            liff.closeWindow();
+        }).catch((err) => {
+            console.error("Sending failed", err);
+        });
+    } else if (type === "text") {
+        liff.sendMessages([{
+            type: "text",
+            text: data["text"]
+        }]).then(() => {
+            liff.closeWindow();
+        }).catch((err) => {
+            console.error("Sending failed", err);
+        });
+    }
+}
+
 window.onload = function() {
     initVConsole();
     initContent();
@@ -49,16 +92,16 @@ function initLiff(liffId) {
     liff.init({
         liffId: liffId
     }).then(() => {
-        if (getParameterByName("type") == "liffToken") getLiffToken();
-        if (getParameterByName("auto") == "yes" && getParameterByName("type")) {
-            sendLiffMessage();
-        }
         initApp();
+        if (liff.isInClient() && liff.isLoggedIn()) {
+            sendFromSheets();
+        }
     }).catch((err) => {
         console.error("LIFF initialization failed", err);
     });
 }
 
+// 以下全部保留不動
 function initApp() {
     console.log("LIFF initialized!");
     if (!liff.isLoggedIn()) {
